@@ -1,0 +1,12 @@
+[project]
+name = "code-chunker"
+version = "0.1.0"
+description = "A scalable code chunker for large monorepos"
+dependencies = [
+    "tree-sitter>=0.20.0",
+    "tree-sitter-java>=0.20.0",
+]
+requires-python = ">=3.9"
+
+[tool.setuptools]
+packages = ["src"]
