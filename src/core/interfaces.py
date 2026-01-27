@@ -36,8 +36,8 @@ class DependencyResolver(ABC):
 
 class Chunker(ABC):
     @abstractmethod
-    def chunk(self, parsed_result: ParsedResult, dependencies: List[Dependency], file_path: str) -> List[Chunk]:
-        """Creates chunks from the parsed result and dependencies."""
+    def chunk(self, parsed_result: ParsedResult, dependencies: List[Dependency], file_path: str, metadata: Optional[Any] = None) -> List[Chunk]:
+        """Creates chunks from the parsed result, dependencies, and optional metadata."""
         pass
 
 class Writer(ABC):

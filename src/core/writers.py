@@ -20,6 +20,14 @@ class TextWriter(Writer):
             for chunk in chunks:
                 f.write(f"--- START CHUNK {chunk.file_path} ---\n")
                 f.write(f"Language: {chunk.language}\n")
+                if chunk.metadata:
+                    f.write("Metadata:\n")
+                    # Handle dict metadata
+                    if isinstance(chunk.metadata, dict):
+                        for k, v in chunk.metadata.items():
+                            f.write(f"  {k}: {v}\n")
+                    else:
+                        f.write(f"  {chunk.metadata}\n")
                 f.write("Imports:\n")
                 for imp in chunk.imports:
                     f.write(f"  {imp}\n")

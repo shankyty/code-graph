@@ -5,6 +5,7 @@ import time
 from typing import List
 from src.core.writers import JSONWriter, TextWriter
 from src.core.interfaces import Chunk
+from src.utils.git import get_file_commit_info
 
 # Global worker state
 _parser = None
@@ -57,7 +58,10 @@ def process_file(file_path: str) -> List[Chunk]:
                 deps.append(d)
                 existing_names.add(d.name)
 
-        chunks = _chunker.chunk(parsed_result, deps, file_path)
+        # Get git metadata
+        metadata = get_file_commit_info(file_path)
+
+        chunks = _chunker.chunk(parsed_result, deps, file_path, metadata=metadata)
         return chunks
     except Exception as e:
         # Log error but don't stop processing
