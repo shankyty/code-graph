@@ -6,15 +6,14 @@ from typing import List, Optional
 
 class MavenResolver(DependencyResolver):
     def resolve(self, file_path: str) -> List[Dependency]:
-        pom_path = self._find_pom(file_path)
+        pom_path = self._find_pom_from_dir(os.path.dirname(os.path.abspath(file_path)))
         if not pom_path:
             return []
         # Return a copy to avoid side effects on cached list
         return list(self._parse_pom(pom_path))
 
     @lru_cache(maxsize=None)
-    def _find_pom(self, file_path: str) -> Optional[str]:
-        current_dir = os.path.dirname(os.path.abspath(file_path))
+    def _find_pom_from_dir(self, current_dir: str) -> Optional[str]:
         # Traverse up to root
         while True:
             pom = os.path.join(current_dir, "pom.xml")

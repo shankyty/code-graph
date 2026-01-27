@@ -61,7 +61,7 @@ def process_file(file_path: str) -> List[Chunk]:
         return chunks
     except Exception as e:
         # Log error but don't stop processing
-        # print(f"Error processing {file_path}: {e}")
+        print(f"Error processing {file_path}: {e}")
         return []
 
 def main():

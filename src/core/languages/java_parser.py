@@ -25,6 +25,8 @@ class JavaParser(Parser):
     def _extract_imports(self, root_node, file_content: bytes) -> List[str]:
         imports = []
         try:
+            # Note: tree-sitter API usage varies by version.
+            # This implementation targets tree-sitter >= 0.22.0.
             query = Query(self.language, "(import_declaration) @import")
             cursor = QueryCursor(query)
             captures = cursor.captures(root_node)
