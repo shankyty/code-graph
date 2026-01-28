@@ -47,6 +47,7 @@ During execution, you can press **`s`** (followed by Enter if buffering occurs) 
 - `--output`, `-o`: The path to the output file (required).
 - `--format`, `-f`: Output format, either `json` (default) or `text`.
 - `--workers`, `-w`: Number of worker processes. Defaults to the number of CPU cores.
+- `--no-tui`: Disable the TUI and run in "Job Mode" with simple logging (useful for CI/CD or non-interactive environments).
 
 ### Examples
 
@@ -54,6 +55,12 @@ During execution, you can press **`s`** (followed by Enter if buffering occurs) 
 
 ```bash
 ./run.sh /path/to/java/project --output output.json
+```
+
+**Job Mode (CI/CD):**
+
+```bash
+./run.sh /path/to/java/project -o output.json --no-tui
 ```
 
 **Specifying Output Format:**

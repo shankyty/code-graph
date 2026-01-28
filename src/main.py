@@ -1,3 +1,4 @@
+import sys
 import argparse
 import os
 import multiprocessing
@@ -91,6 +92,7 @@ def main():
     parser.add_argument("--output", "-o", help="Output file path", required=True)
     parser.add_argument("--format", "-f", choices=["json", "text"], default="json", help="Output format")
     parser.add_argument("--workers", "-w", type=int, default=os.cpu_count(), help="Number of workers")
+    parser.add_argument("--no-tui", action="store_true", help="Disable TUI (Job Mode)")
 
     args = parser.parse_args()
 
@@ -126,17 +128,36 @@ def main():
     # Process
     chunk_size = max(1, len(files) // (args.workers * 4))
 
-    # Create Manager for shared state
-    with multiprocessing.Manager() as manager:
-        status_dict = manager.dict()
+    # Determine execution mode
+    use_tui = not args.no_tui and os.isatty(sys.stdout.fileno())
 
-        # Initialize pool with status_dict
-        with multiprocessing.Pool(processes=args.workers, initializer=init_worker, initargs=(status_dict,)) as pool:
-            # Start processing
+    if use_tui:
+        # Create Manager for shared state
+        with multiprocessing.Manager() as manager:
+            status_dict = manager.dict()
+
+            # Initialize pool with status_dict
+            with multiprocessing.Pool(processes=args.workers, initializer=init_worker, initargs=(status_dict,)) as pool:
+                # Start processing
+                result_iter = pool.imap_unordered(process_file, files, chunksize=chunk_size)
+
+                # Delegate loop to UI handler
+                run_tui(status_dict, result_iter, writer, args.output, files=files)
+    else:
+        # Job Mode (No TUI)
+        print("Running in Job Mode (No TUI)")
+        with multiprocessing.Pool(processes=args.workers, initializer=init_worker, initargs=(None,)) as pool:
             result_iter = pool.imap_unordered(process_file, files, chunksize=chunk_size)
 
-            # Delegate loop to UI handler
-            run_tui(status_dict, result_iter, writer, args.output, files=files)
+            processed_count = 0
+            for file_path, chunks in result_iter:
+                if chunks:
+                    writer.write(chunks, args.output)
+                    processed_count += 1
+
+                # Simple progress logging
+                if processed_count % 10 == 0:
+                     print(f"Processed {processed_count}/{len(files)} files...")
 
     elapsed = time.time() - start_time
     print(f"Done. Processed {len(files)} files in {elapsed:.2f}s. Output written to {args.output}")
