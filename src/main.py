@@ -55,14 +55,22 @@ def process_file(file_path: str) -> Tuple[str, List[Chunk]]:
         if not file_path.endswith(".java"):
             return file_path, []
 
+        t_start = time.time()
         with open(file_path, 'rb') as f:
             content = f.read()
 
+        t0 = time.time()
         parsed_result = _parser.parse(content, file_path)
+        t_parse = time.time() - t0
 
+        t0 = time.time()
         deps = _maven_resolver.resolve(file_path)
+        t_maven = time.time() - t0
+
+        t0 = time.time()
         # Extend with Bazel deps
         bazel_deps = _bazel_resolver.resolve(file_path)
+        t_bazel = time.time() - t0
 
         existing_names = {d.name for d in deps}
         for d in bazel_deps:
@@ -71,7 +79,27 @@ def process_file(file_path: str) -> Tuple[str, List[Chunk]]:
                 existing_names.add(d.name)
 
         # Get git metadata
+        t0 = time.time()
         metadata = get_file_commit_info(file_path)
+        t_git = time.time() - t0
+
+        # Prepare metrics
+        metrics = {
+            "parse_time_ms": t_parse * 1000,
+            "maven_resolve_time_ms": t_maven * 1000,
+            "bazel_resolve_time_ms": t_bazel * 1000,
+            "git_metadata_time_ms": t_git * 1000,
+            "total_processing_time_ms": (time.time() - t_start) * 1000
+        }
+
+        # Merge metrics into metadata
+        if metadata is None:
+            metadata = {}
+        if isinstance(metadata, dict):
+            metadata.update(metrics)
+        else:
+            # If metadata is not a dict (shouldn't happen with current impl), wrap it or just ignore
+            pass
 
         chunks = _chunker.chunk(parsed_result, deps, file_path, metadata=metadata)
         return file_path, chunks
