@@ -5,15 +5,22 @@ A scalable tool to parse and chunk Java code, specifically designed for large mo
 ## Prerequisites
 
 - [uv](https://github.com/astral-sh/uv) (Fast Python package installer and resolver)
+- [fzf](https://github.com/junegunn/fzf) (Command-line fuzzy finder, required for search feature)
 - Python 3.9+
 
 ## Installation
 
 1.  Clone the repository.
-2.  Ensure `uv` is installed.
+2.  Ensure `uv` and `fzf` are installed.
 
     ```bash
-    # On macOS/Linux
+    # On macOS
+    brew install fzf
+
+    # On Linux (Ubuntu)
+    sudo apt-get install fzf
+
+    # Install uv
     curl -LsSf https://astral.sh/uv/install.sh | sh
     ```
 
@@ -25,12 +32,22 @@ You can run the tool using the provided helper script `run.sh`, which automatica
 ./run.sh <source_dir> --output <output_file> [options]
 ```
 
+### Interactive TUI
+
+The tool runs with a **Rich-based Text User Interface (TUI)** that displays:
+- Overall progress.
+- Real-time status of each worker process.
+
+**Search Feature:**
+During execution, you can press **`s`** (followed by Enter if buffering occurs) to pause the progress view and open a **fuzzy search** (via `fzf`) to filter and view the status of all files (Pending, Processing, Done).
+
 ### Arguments
 
 - `source_dir`: The root directory to scan for Java files.
 - `--output`, `-o`: The path to the output file (required).
 - `--format`, `-f`: Output format, either `json` (default) or `text`.
 - `--workers`, `-w`: Number of worker processes. Defaults to the number of CPU cores.
+- `--no-tui`: Disable the TUI and run in "Job Mode" with simple logging (useful for CI/CD or non-interactive environments).
 
 ### Examples
 
@@ -38,6 +55,12 @@ You can run the tool using the provided helper script `run.sh`, which automatica
 
 ```bash
 ./run.sh /path/to/java/project --output output.json
+```
+
+**Job Mode (CI/CD):**
+
+```bash
+./run.sh /path/to/java/project -o output.json --no-tui
 ```
 
 **Specifying Output Format:**
