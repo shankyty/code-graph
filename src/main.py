@@ -2,22 +2,28 @@ import argparse
 import os
 import multiprocessing
 import time
-from typing import List
+from typing import List, Optional, Any, Tuple
 from src.core.writers import JSONWriter, TextWriter
 from src.core.interfaces import Chunk
 from src.utils.git import get_file_commit_info
+from src.ui import run_tui
 
 # Global worker state
 _parser = None
 _maven_resolver = None
 _bazel_resolver = None
 _chunker = None
+_status_dict = None
 
-def init_worker():
-    """Initialize worker process with parser and resolvers."""
-    global _parser, _maven_resolver, _bazel_resolver, _chunker
-    # Import inside worker to avoid some pickling issues if any,
-    # though with fork it shouldn't matter much.
+def init_worker(status_dict: Optional[Any] = None):
+    """Initialize worker process with parser, resolvers, and status tracker."""
+    global _parser, _maven_resolver, _bazel_resolver, _chunker, _status_dict
+
+    # Store the shared status dictionary
+    if status_dict is not None:
+        _status_dict = status_dict
+
+    # Import inside worker
     from src.core.languages.java_parser import JavaParser
     from src.core.dependencies.maven import MavenResolver
     from src.core.dependencies.bazel import BazelResolver
@@ -31,8 +37,14 @@ def init_worker():
     except Exception as e:
         print(f"Worker initialization failed: {e}")
 
-def process_file(file_path: str) -> List[Chunk]:
-    global _parser, _maven_resolver, _bazel_resolver, _chunker
+def process_file(file_path: str) -> Tuple[str, List[Chunk]]:
+    global _parser, _maven_resolver, _bazel_resolver, _chunker, _status_dict
+
+    pid = os.getpid()
+    # Update status to processing
+    if _status_dict is not None:
+        _status_dict[pid] = {"file": file_path, "status": "Processing"}
+
     try:
         # Check if initialized
         if _parser is None:
@@ -40,7 +52,7 @@ def process_file(file_path: str) -> List[Chunk]:
             init_worker()
 
         if not file_path.endswith(".java"):
-            return []
+            return file_path, []
 
         with open(file_path, 'rb') as f:
             content = f.read()
@@ -50,8 +62,7 @@ def process_file(file_path: str) -> List[Chunk]:
         deps = _maven_resolver.resolve(file_path)
         # Extend with Bazel deps
         bazel_deps = _bazel_resolver.resolve(file_path)
-        # Avoid duplicate deps?
-        # Simple deduplication based on name
+
         existing_names = {d.name for d in deps}
         for d in bazel_deps:
             if d.name not in existing_names:
@@ -62,11 +73,17 @@ def process_file(file_path: str) -> List[Chunk]:
         metadata = get_file_commit_info(file_path)
 
         chunks = _chunker.chunk(parsed_result, deps, file_path, metadata=metadata)
-        return chunks
+        return file_path, chunks
     except Exception as e:
         # Log error but don't stop processing
         print(f"Error processing {file_path}: {e}")
-        return []
+        if _status_dict is not None:
+             _status_dict[pid] = {"file": file_path, "status": f"Error: {str(e)}"}
+        return file_path, []
+    finally:
+        # Update status to Idle/Done
+        if _status_dict is not None:
+            _status_dict[pid] = {"file": file_path, "status": "Idle"}
 
 def main():
     parser = argparse.ArgumentParser(description="Scalable Code Chunker")
@@ -107,21 +124,22 @@ def main():
         os.remove(args.output)
 
     # Process
-    # Use chunksize for better performance with many small files
     chunk_size = max(1, len(files) // (args.workers * 4))
 
-    with multiprocessing.Pool(processes=args.workers, initializer=init_worker) as pool:
-        # imap_unordered is good for streaming
-        processed_count = 0
-        for chunks in pool.imap_unordered(process_file, files, chunksize=chunk_size):
-            if chunks:
-                writer.write(chunks, args.output)
-                processed_count += 1
+    # Create Manager for shared state
+    with multiprocessing.Manager() as manager:
+        status_dict = manager.dict()
 
-            # Progress indicator could be added here
+        # Initialize pool with status_dict
+        with multiprocessing.Pool(processes=args.workers, initializer=init_worker, initargs=(status_dict,)) as pool:
+            # Start processing
+            result_iter = pool.imap_unordered(process_file, files, chunksize=chunk_size)
+
+            # Delegate loop to UI handler
+            run_tui(status_dict, result_iter, writer, args.output, files=files)
 
     elapsed = time.time() - start_time
-    print(f"Done. Processed {processed_count} files in {elapsed:.2f}s. Output written to {args.output}")
+    print(f"Done. Processed {len(files)} files in {elapsed:.2f}s. Output written to {args.output}")
 
 if __name__ == "__main__":
     main()
