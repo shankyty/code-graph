@@ -60,11 +60,6 @@ done
 echo "Profiling to $OUTPUT_PROFILE..."
 echo "Running with arguments: ${ARGS[@]}"
 
-# Run py-spy
-# usage: py-spy record -o profile.svg --native -- python myprogram.py
-# We use 'uv run' to ensure python environment is correct.
-# py-spy executes the command after '--'
-
 # Resolve python executable to avoid uv wrapping issues with py-spy
 if command_exists uv; then
     PYTHON_EXEC=$(uv run which python)
