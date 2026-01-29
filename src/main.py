@@ -3,10 +3,10 @@ import argparse
 import os
 import multiprocessing
 import time
-from typing import List, Optional, Any, Tuple
+from typing import List, Optional, Any, Tuple, Dict
 from src.core.writers import JSONWriter, TextWriter
 from src.core.interfaces import Chunk
-from src.utils.git import get_file_commit_info
+from src.utils.git import get_file_commit_info, get_bulk_commit_info
 from src.ui import run_tui
 
 # Global worker state
@@ -15,14 +15,21 @@ _maven_resolver = None
 _bazel_resolver = None
 _chunker = None
 _status_dict = None
+_git_metadata = None
 
-def init_worker(status_dict: Optional[Any] = None):
+def init_worker(status_dict: Optional[Any] = None, git_metadata: Optional[Dict] = None):
     """Initialize worker process with parser, resolvers, and status tracker."""
-    global _parser, _maven_resolver, _bazel_resolver, _chunker, _status_dict
+    global _parser, _maven_resolver, _bazel_resolver, _chunker, _status_dict, _git_metadata
 
     # Store the shared status dictionary
     if status_dict is not None:
         _status_dict = status_dict
+
+    # Store git metadata
+    if git_metadata is not None:
+        _git_metadata = git_metadata
+    else:
+        _git_metadata = {}
 
     # Import inside worker
     from src.core.languages.java_parser import JavaParser
@@ -39,7 +46,7 @@ def init_worker(status_dict: Optional[Any] = None):
         print(f"Worker initialization failed: {e}")
 
 def process_file(file_path: str) -> Tuple[str, List[Chunk]]:
-    global _parser, _maven_resolver, _bazel_resolver, _chunker, _status_dict
+    global _parser, _maven_resolver, _bazel_resolver, _chunker, _status_dict, _git_metadata
 
     pid = os.getpid()
     # Update status to processing
@@ -143,6 +150,11 @@ def main():
 
     print(f"Found {len(files)} files. Processing with {args.workers} workers...")
 
+    # Load git metadata
+    print("Loading git metadata...")
+    git_metadata = get_bulk_commit_info(files)
+    print(f"Loaded metadata for {len(git_metadata)} files.")
+
     # Select writer
     if args.format == "json":
         writer = JSONWriter()
@@ -164,8 +176,8 @@ def main():
         with multiprocessing.Manager() as manager:
             status_dict = manager.dict()
 
-            # Initialize pool with status_dict
-            with multiprocessing.Pool(processes=args.workers, initializer=init_worker, initargs=(status_dict,)) as pool:
+            # Initialize pool with status_dict and git_metadata
+            with multiprocessing.Pool(processes=args.workers, initializer=init_worker, initargs=(status_dict, git_metadata)) as pool:
                 # Start processing
                 result_iter = pool.imap_unordered(process_file, files, chunksize=chunk_size)
 
@@ -174,7 +186,7 @@ def main():
     else:
         # Job Mode (No TUI)
         print("Running in Job Mode (No TUI)")
-        with multiprocessing.Pool(processes=args.workers, initializer=init_worker, initargs=(None,)) as pool:
+        with multiprocessing.Pool(processes=args.workers, initializer=init_worker, initargs=(None, git_metadata)) as pool:
             result_iter = pool.imap_unordered(process_file, files, chunksize=chunk_size)
 
             processed_count = 0
