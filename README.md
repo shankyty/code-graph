@@ -77,3 +77,31 @@ The tool is optimized for high-performance workstations, such as:
 -   **MacBook Pro** (Apple Silicon M2/M3 Max)
 
 The `run.sh` script automatically detects available resources to ensure efficient processing on these powerful machines.
+
+## Profiling
+
+To analyze the performance of the tool and identify bottlenecks, you can use the `profile.sh` script. This script wraps `py-spy` to generate a flamegraph of the execution.
+
+It accepts the same arguments as `run.sh`, with an optional `--profile-out` argument to specify the location of the flamegraph.
+
+**Basic Profiling:**
+
+```bash
+./profile.sh /path/to/java/project --output output.json
+```
+
+This will generate a `profile.svg` file in the current directory.
+
+**Specifying Profile Output:**
+
+```bash
+./profile.sh --profile-out /tmp/my_profile.svg /path/to/java/project --output output.json
+```
+
+You can also pass a directory to `--profile-out` (the file will be named `profile.svg` inside that directory):
+
+```bash
+./profile.sh --profile-out /tmp/profiles/ /path/to/java/project --output output.json
+```
+
+The script automatically detects your system configuration (OS, CPU cores) just like `run.sh` and handles the installation of `py-spy` if needed.
