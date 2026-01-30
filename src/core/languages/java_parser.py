@@ -8,6 +8,8 @@ class JavaParser(Parser):
         try:
             self.language = Language(tree_sitter_java.language())
             self.parser = TSParser(self.language)
+            # Pre-compile query for performance
+            self.import_query = Query(self.language, "(import_declaration) @import")
         except Exception as e:
             print(f"Error loading Java language: {e}")
             raise e
@@ -27,8 +29,7 @@ class JavaParser(Parser):
         try:
             # Note: tree-sitter API usage varies by version.
             # This implementation targets tree-sitter >= 0.22.0.
-            query = Query(self.language, "(import_declaration) @import")
-            cursor = QueryCursor(query)
+            cursor = QueryCursor(self.import_query)
             captures = cursor.captures(root_node)
 
             for name, nodes in captures.items():
