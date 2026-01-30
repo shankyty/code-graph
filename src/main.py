@@ -154,15 +154,18 @@ def main():
 
     start_time = time.time()
 
+    source_dir = os.path.expanduser(args.source_dir)
+    output_arg = os.path.expanduser(args.output)
+
     # Verify output directory
-    output_dir = os.path.abspath(args.output)
+    output_dir = os.path.abspath(output_arg)
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
     # Find files
-    print(f"Scanning {args.source_dir} for Java files...")
+    print(f"Scanning {source_dir} for Java files...")
     files = []
-    for root, dirs, filenames in os.walk(args.source_dir):
+    for root, dirs, filenames in os.walk(source_dir):
         # Skip hidden directories
         dirs[:] = [d for d in dirs if not d.startswith('.')]
         for name in filenames:
