@@ -6,38 +6,73 @@ from typing import List
 
 class JSONWriter(Writer):
     def write(self, chunks: List[Chunk], output_path: str) -> None:
-        # Ensure directory exists
-        os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
-        # Append mode for streaming
-        with open(output_path, 'a', encoding='utf-8') as f:
-            for chunk in chunks:
-                f.write(json.dumps(asdict(chunk)) + '\n')
+        # output_path is treated as a root directory
+        base_dir = os.path.abspath(output_path)
+        os.makedirs(base_dir, exist_ok=True)
+
+        for chunk in chunks:
+            # Construct filename: <base_dir>/<rel_path>.json
+            # Remove leading ./ or / from chunk.file_path to ensure relative join
+            rel_path = chunk.file_path.lstrip(os.sep)
+            if rel_path.startswith('.' + os.sep):
+                rel_path = rel_path[2:]
+
+            dest_path = os.path.join(base_dir, rel_path + ".json")
+
+            # Ensure parent dirs exist
+            os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+
+            with open(dest_path, 'w', encoding='utf-8') as f:
+                json.dump(asdict(chunk), f, indent=2)
 
 class TextWriter(Writer):
     def write(self, chunks: List[Chunk], output_path: str) -> None:
-        os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
-        with open(output_path, 'a', encoding='utf-8') as f:
-            for chunk in chunks:
-                f.write(f"--- START CHUNK {chunk.file_path} ---\n")
-                f.write(f"Language: {chunk.language}\n")
-                if chunk.metadata:
-                    f.write("Metadata:\n")
-                    # Handle dict metadata
-                    if isinstance(chunk.metadata, dict):
-                        for k, v in chunk.metadata.items():
-                            f.write(f"  {k}: {v}\n")
-                    else:
-                        f.write(f"  {chunk.metadata}\n")
-                f.write("Imports:\n")
-                for imp in chunk.imports:
-                    f.write(f"  {imp}\n")
-                f.write("Dependencies:\n")
-                for dep in chunk.dependencies:
-                    ver = f":{dep.version}" if dep.version else ""
-                    f.write(f"  {dep.name}{ver} ({dep.type})\n")
-                f.write("Code:\n")
-                f.write(chunk.code)
-                # Ensure newline at end of code
-                if not chunk.code.endswith('\n'):
-                    f.write('\n')
-                f.write(f"--- END CHUNK {chunk.file_path} ---\n\n")
+        base_dir = os.path.abspath(output_path)
+        os.makedirs(base_dir, exist_ok=True)
+
+        for chunk in chunks:
+            rel_path = chunk.file_path.lstrip(os.sep)
+            if rel_path.startswith('.' + os.sep):
+                rel_path = rel_path[2:]
+
+            dest_path = os.path.join(base_dir, rel_path + ".txt")
+            os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+
+            with open(dest_path, 'w', encoding='utf-8') as f:
+                self._write_chunk(f, chunk)
+
+    def _write_chunk(self, f, chunk, indent=0):
+        prefix = "  " * indent
+        f.write(f"{prefix}--- {chunk.kind.upper()} {chunk.id} ---\n")
+        f.write(f"{prefix}Language: {chunk.language}\n")
+
+        if chunk.package:
+            f.write(f"{prefix}Package: {chunk.package}\n")
+
+        if chunk.imports:
+            f.write(f"{prefix}Imports:\n")
+            for imp in chunk.imports:
+                f.write(f"{prefix}  {imp}\n")
+
+        if chunk.dependencies:
+            f.write(f"{prefix}Dependencies:\n")
+            for dep in chunk.dependencies:
+                ver = f":{dep.version}" if dep.version else ""
+                f.write(f"{prefix}  {dep.name}{ver} ({dep.type})\n")
+
+        if chunk.metadata:
+            f.write(f"{prefix}Metadata: {chunk.metadata}\n")
+
+        if chunk.code:
+            f.write(f"{prefix}Code:\n")
+            # Indent code block
+            for line in chunk.code.splitlines():
+                f.write(f"{prefix}  {line}\n")
+            f.write("\n")
+
+        if chunk.children:
+            f.write(f"{prefix}Children:\n")
+            for child in chunk.children:
+                self._write_chunk(f, child, indent + 1)
+
+        f.write(f"{prefix}--- END {chunk.kind.upper()} ---\n\n")

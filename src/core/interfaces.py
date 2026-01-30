@@ -1,6 +1,7 @@
+from __future__ import annotations
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from typing import List, Optional, Any
+from dataclasses import dataclass, field
+from typing import List, Optional, Any, Tuple
 
 @dataclass
 class Dependency:
@@ -9,18 +10,54 @@ class Dependency:
     type: str = "unknown" # "maven", "bazel", etc.
 
 @dataclass
+class MethodNode:
+    name: str
+    signature: str
+    code: str
+    start_point: Tuple[int, int]
+    end_point: Tuple[int, int]
+    used_imports: List[str] = field(default_factory=list)
+    is_override: bool = False
+    annotations: List[str] = field(default_factory=list)
+
+@dataclass
+class ClassNode:
+    name: str
+    code: str
+    start_point: Tuple[int, int]
+    end_point: Tuple[int, int]
+    package: str = ""
+    extends: Optional[str] = None
+    implements: List[str] = field(default_factory=list)
+    methods: List[MethodNode] = field(default_factory=list)
+    annotations: List[str] = field(default_factory=list)
+
+@dataclass
 class ParsedResult:
     code: str
     imports: List[str]
+    classes: List[ClassNode] = field(default_factory=list)
 
 @dataclass
 class Chunk:
+    id: str
     file_path: str
     language: str
+    kind: str # "class", "method"
     code: str
-    imports: List[str]
-    dependencies: List[Dependency]
     metadata: Optional[Any] = None
+    # Class details
+    package: str = ""
+    extends: Optional[str] = None
+    implements: List[str] = field(default_factory=list)
+    imports: List[str] = field(default_factory=list)
+    dependencies: List[Dependency] = field(default_factory=list)
+    # Method details
+    signature: Optional[str] = None
+    is_override: bool = False
+    # Hierarchy
+    parent_id: Optional[str] = None
+    children: List[Chunk] = field(default_factory=list)
 
 class Parser(ABC):
     @abstractmethod

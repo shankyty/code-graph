@@ -1,11 +1,36 @@
 import unittest
 from src.core.chunker import StandardChunker
-from src.core.interfaces import ParsedResult, Dependency, Chunk
+from src.core.interfaces import ParsedResult, Dependency, Chunk, ClassNode, MethodNode
 
 class TestStandardChunker(unittest.TestCase):
-    def test_chunk(self):
+    def test_chunk_with_classes(self):
         chunker = StandardChunker()
-        parsed_result = ParsedResult(code="public class Test {}", imports=["import java.util.List;"])
+
+        # Mock parsed result
+        method = MethodNode(
+            name="main",
+            signature="public static void main(String[] args)",
+            code="...",
+            start_point=(3, 4),
+            end_point=(5, 5),
+            used_imports=[]
+        )
+
+        cls = ClassNode(
+            name="Test",
+            code="public class Test { ... }",
+            start_point=(1, 0),
+            end_point=(6, 1),
+            package="com.example",
+            methods=[method]
+        )
+
+        parsed_result = ParsedResult(
+            code="...",
+            imports=["java.util.List"],
+            classes=[cls]
+        )
+
         dependencies = [Dependency(name="junit", version="4.12", type="maven")]
         file_path = "src/Test.java"
 
@@ -13,12 +38,15 @@ class TestStandardChunker(unittest.TestCase):
 
         self.assertEqual(len(chunks), 1)
         chunk = chunks[0]
+        self.assertEqual(chunk.kind, "class")
         self.assertEqual(chunk.file_path, "src/Test.java")
-        self.assertEqual(chunk.language, "java")
-        self.assertEqual(chunk.code, "public class Test {}")
-        self.assertEqual(chunk.imports, ["import java.util.List;"])
-        self.assertEqual(len(chunk.dependencies), 1)
-        self.assertEqual(chunk.dependencies[0].name, "junit")
+        self.assertEqual(chunk.id, "src/Test.java::Test")
+        self.assertEqual(chunk.package, "com.example")
+
+        self.assertEqual(len(chunk.children), 1)
+        child = chunk.children[0]
+        self.assertEqual(child.kind, "method")
+        self.assertTrue(child.id.endswith("::main"))
 
 if __name__ == '__main__':
     unittest.main()
