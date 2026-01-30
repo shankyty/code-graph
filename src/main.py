@@ -3,10 +3,10 @@ import argparse
 import os
 import multiprocessing
 import time
+import hashlib
 from typing import List, Optional, Any, Tuple
 from src.core.writers import JSONWriter, TextWriter
 from src.core.interfaces import Chunk
-from src.utils.git import get_file_commit_info
 from src.ui import run_tui
 
 # Global worker state
@@ -60,6 +60,11 @@ def process_file(file_path: str) -> Tuple[str, List[Chunk]]:
             content = f.read()
 
         t0 = time.time()
+        file_hash = hashlib.sha256(content).hexdigest()
+        file_mtime = os.path.getmtime(file_path)
+        t_meta = time.time() - t0
+
+        t0 = time.time()
         parsed_result = _parser.parse(content, file_path)
         t_parse = time.time() - t0
 
@@ -78,28 +83,21 @@ def process_file(file_path: str) -> Tuple[str, List[Chunk]]:
                 deps.append(d)
                 existing_names.add(d.name)
 
-        # Get git metadata
-        t0 = time.time()
-        metadata = get_file_commit_info(file_path)
-        t_git = time.time() - t0
-
         # Prepare metrics
         metrics = {
             "parse_time_ms": t_parse * 1000,
             "maven_resolve_time_ms": t_maven * 1000,
             "bazel_resolve_time_ms": t_bazel * 1000,
-            "git_metadata_time_ms": t_git * 1000,
+            "meta_calc_time_ms": t_meta * 1000,
             "total_processing_time_ms": (time.time() - t_start) * 1000
         }
 
-        # Merge metrics into metadata
-        if metadata is None:
-            metadata = {}
-        if isinstance(metadata, dict):
-            metadata.update(metrics)
-        else:
-            # If metadata is not a dict (shouldn't happen with current impl), wrap it or just ignore
-            pass
+        # Create metadata with checksum and timestamp
+        metadata = {
+            "checksum": file_hash,
+            "timestamp": file_mtime,
+            **metrics
+        }
 
         chunks = _chunker.chunk(parsed_result, deps, file_path, metadata=metadata)
         return file_path, chunks

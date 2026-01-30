@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from typing import List, Optional, Any
+from dataclasses import dataclass, field
+from typing import List, Optional, Any, Dict
 
 @dataclass
 class Dependency:
@@ -12,6 +12,7 @@ class Dependency:
 class ParsedResult:
     code: str
     imports: List[str]
+    structure: Optional[Dict[str, Any]] = None
 
 @dataclass
 class Chunk:
@@ -21,6 +22,7 @@ class Chunk:
     imports: List[str]
     dependencies: List[Dependency]
     metadata: Optional[Any] = None
+    sub_chunks: List["Chunk"] = field(default_factory=list)
 
 class Parser(ABC):
     @abstractmethod
