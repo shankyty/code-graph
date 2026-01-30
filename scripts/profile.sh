@@ -57,6 +57,15 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# Detect Cores (Similar to run.sh)
+if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+    CORES=$(nproc)
+elif [[ "$OSTYPE" == "darwin"* ]]; then
+    CORES=$(sysctl -n hw.logicalcpu)
+else
+    CORES=1
+fi
+
 echo "Profiling to $OUTPUT_PROFILE..."
 echo "Running with arguments: ${ARGS[@]}"
 
@@ -68,4 +77,8 @@ else
 fi
 echo "Resolved Python: $PYTHON_EXEC"
 
-py-spy record --native -o "$OUTPUT_PROFILE" -- "$PYTHON_EXEC" src/main.py "${ARGS[@]}"
+# Prepend --workers CORES to ARGS if not overridden (simulating run.sh behavior)
+# However, py-spy needs the command to be exact.
+# We append --workers $CORES before other args so user can override if they passed -w in ARGS (last arg wins in argparse)
+
+py-spy record --native -o "$OUTPUT_PROFILE" -- "$PYTHON_EXEC" src/main.py --workers "$CORES" "${ARGS[@]}"
