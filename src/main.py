@@ -42,14 +42,6 @@ def init_worker(status_dict: Optional[Any] = None, output_dir: Optional[str] = N
     except Exception as e:
         print(f"Worker initialization failed: {e}")
 
-def calculate_checksum(file_path: str) -> str:
-    sha256_hash = hashlib.sha256()
-    with open(file_path, "rb") as f:
-        # Read and update hash string value in blocks of 4K
-        for byte_block in iter(lambda: f.read(4096), b""):
-            sha256_hash.update(byte_block)
-    return sha256_hash.hexdigest()
-
 def process_file(file_path: str) -> Tuple[str, List[Chunk]]:
     global _parser, _maven_resolver, _bazel_resolver, _chunker, _status_dict, _output_dir
 
@@ -67,9 +59,19 @@ def process_file(file_path: str) -> Tuple[str, List[Chunk]]:
         if not file_path.endswith(".java"):
             return file_path, []
 
-        # Checksum logic
+        t_start = time.time()
+
+        # Read file content once
         try:
-            current_checksum = calculate_checksum(file_path)
+            with open(file_path, 'rb') as f:
+                content = f.read()
+        except Exception as e:
+            print(f"Error reading {file_path}: {e}")
+            return file_path, []
+
+        # Checksum logic using loaded content
+        try:
+            current_checksum = hashlib.sha256(content).hexdigest()
 
             # Check if output already exists and is up to date
             if _output_dir:
@@ -96,10 +98,6 @@ def process_file(file_path: str) -> Tuple[str, List[Chunk]]:
         except Exception as e:
             print(f"Error calculating checksum for {file_path}: {e}")
             return file_path, []
-
-        t_start = time.time()
-        with open(file_path, 'rb') as f:
-            content = f.read()
 
         t0 = time.time()
         parsed_result = _parser.parse(content, file_path)
