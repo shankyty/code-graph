@@ -3,10 +3,10 @@ import argparse
 import os
 import multiprocessing
 import time
-from typing import List, Optional, Any, Tuple, Dict
+from typing import List, Optional, Any, Tuple
 from src.core.writers import JSONWriter, TextWriter
 from src.core.interfaces import Chunk
-from src.utils.git import get_file_commit_info, get_bulk_commit_info
+from src.utils.git import get_file_commit_info
 from src.ui import run_tui
 
 # Global worker state
@@ -15,21 +15,14 @@ _maven_resolver = None
 _bazel_resolver = None
 _chunker = None
 _status_dict = None
-_git_metadata = None
 
-def init_worker(status_dict: Optional[Any] = None, git_metadata: Optional[Dict] = None):
+def init_worker(status_dict: Optional[Any] = None):
     """Initialize worker process with parser, resolvers, and status tracker."""
-    global _parser, _maven_resolver, _bazel_resolver, _chunker, _status_dict, _git_metadata
+    global _parser, _maven_resolver, _bazel_resolver, _chunker, _status_dict
 
     # Store the shared status dictionary
     if status_dict is not None:
         _status_dict = status_dict
-
-    # Store git metadata
-    if git_metadata is not None:
-        _git_metadata = git_metadata
-    else:
-        _git_metadata = {}
 
     # Import inside worker
     from src.core.languages.java_parser import JavaParser
@@ -46,7 +39,7 @@ def init_worker(status_dict: Optional[Any] = None, git_metadata: Optional[Dict] 
         print(f"Worker initialization failed: {e}")
 
 def process_file(file_path: str) -> Tuple[str, List[Chunk]]:
-    global _parser, _maven_resolver, _bazel_resolver, _chunker, _status_dict, _git_metadata
+    global _parser, _maven_resolver, _bazel_resolver, _chunker, _status_dict
 
     pid = os.getpid()
     # Update status to processing
@@ -62,14 +55,22 @@ def process_file(file_path: str) -> Tuple[str, List[Chunk]]:
         if not file_path.endswith(".java"):
             return file_path, []
 
+        t_start = time.time()
         with open(file_path, 'rb') as f:
             content = f.read()
 
+        t0 = time.time()
         parsed_result = _parser.parse(content, file_path)
+        t_parse = time.time() - t0
 
+        t0 = time.time()
         deps = _maven_resolver.resolve(file_path)
+        t_maven = time.time() - t0
+
+        t0 = time.time()
         # Extend with Bazel deps
         bazel_deps = _bazel_resolver.resolve(file_path)
+        t_bazel = time.time() - t0
 
         existing_names = {d.name for d in deps}
         for d in bazel_deps:
@@ -78,12 +79,27 @@ def process_file(file_path: str) -> Tuple[str, List[Chunk]]:
                 existing_names.add(d.name)
 
         # Get git metadata
-        metadata = None
-        if _git_metadata:
-             metadata = _git_metadata.get(file_path)
+        t0 = time.time()
+        metadata = get_file_commit_info(file_path)
+        t_git = time.time() - t0
 
+        # Prepare metrics
+        metrics = {
+            "parse_time_ms": t_parse * 1000,
+            "maven_resolve_time_ms": t_maven * 1000,
+            "bazel_resolve_time_ms": t_bazel * 1000,
+            "git_metadata_time_ms": t_git * 1000,
+            "total_processing_time_ms": (time.time() - t_start) * 1000
+        }
+
+        # Merge metrics into metadata
         if metadata is None:
-             metadata = get_file_commit_info(file_path)
+            metadata = {}
+        if isinstance(metadata, dict):
+            metadata.update(metrics)
+        else:
+            # If metadata is not a dict (shouldn't happen with current impl), wrap it or just ignore
+            pass
 
         chunks = _chunker.chunk(parsed_result, deps, file_path, metadata=metadata)
         return file_path, chunks
@@ -127,11 +143,6 @@ def main():
 
     print(f"Found {len(files)} files. Processing with {args.workers} workers...")
 
-    # Load git metadata
-    print("Loading git metadata...")
-    git_metadata = get_bulk_commit_info(files)
-    print(f"Loaded metadata for {len(git_metadata)} files.")
-
     # Select writer
     if args.format == "json":
         writer = JSONWriter()
@@ -153,8 +164,8 @@ def main():
         with multiprocessing.Manager() as manager:
             status_dict = manager.dict()
 
-            # Initialize pool with status_dict and git_metadata
-            with multiprocessing.Pool(processes=args.workers, initializer=init_worker, initargs=(status_dict, git_metadata)) as pool:
+            # Initialize pool with status_dict
+            with multiprocessing.Pool(processes=args.workers, initializer=init_worker, initargs=(status_dict,)) as pool:
                 # Start processing
                 result_iter = pool.imap_unordered(process_file, files, chunksize=chunk_size)
 
@@ -163,7 +174,7 @@ def main():
     else:
         # Job Mode (No TUI)
         print("Running in Job Mode (No TUI)")
-        with multiprocessing.Pool(processes=args.workers, initializer=init_worker, initargs=(None, git_metadata)) as pool:
+        with multiprocessing.Pool(processes=args.workers, initializer=init_worker, initargs=(None,)) as pool:
             result_iter = pool.imap_unordered(process_file, files, chunksize=chunk_size)
 
             processed_count = 0
